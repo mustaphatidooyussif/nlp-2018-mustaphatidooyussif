@@ -1,10 +1,17 @@
 import argparse
 import random
+import nltk 
 import numpy as np
 import pandas as pd
 from string import punctuation
 from sklearn.feature_extraction import stop_words
-from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer, TfidfTransformer
+from nltk.corpus import stopwords
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn import metrics
+from sklearn.preprocessing import scale 
+
 
 class CommandlineArgument(object):
     """Class for command line argument parsing
@@ -15,6 +22,9 @@ class CommandlineArgument(object):
 
     def getTask(self):
         return self.args.task #returns the task
+
+    def getFile(self):
+        return self.questions_file
 
     def parse_arguments(self): #command line arguments parser
         """Commandline arguments parser: 
@@ -31,14 +41,51 @@ class TopicModelling(CommandlineArgument):
     
     def __init__(self):
         super().__init__()
-        self.task = "topic"
+        self.clf = LogisticRegression() #This variable is for our classifier 
+        self.X_train = None #This variable is for our train data sentences 
+        self.X_test = None #This variable is for our test data sentences 
+        self.y_train = None #This variable is for our train data predictions 
+        self.y_test = None #This varible is for our test data  predictions 
+        self.vector = None 
 
-    def getTask(self):
-        return self.task
 
-    def predit_topic(self):
-        print("Please modify me to contain the code for the topic modeling")
-
+    #This function reads in the data from a file and splits it into training and test data    
+    def read(self,file, file2):
+        df = pd.read_csv(file, sep='\t', names= ["questions"])
+        df2 = pd.read_csv(file2, sep='\t', names =['topics'])
+        df['topics'] = df2.topics
+        df['topics_id'] = df2['topics'].factorize()[0]
+        stopword_set = set(stopwords.words('english'))
+        self.vector = TfidfVectorizer(sublinear_tf=True, min_df=5, norm='l2', encoding='latin-1', ngram_range=(1, 2), stop_words='english')
+        data_predict = df.topics
+        data_txt = self.vector.fit_transform(df.questions).toarray()
+        data_txt.shape
+        self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(data_txt,data_predict,test_size=0.33,random_state=0)
+        
+    #This function trains the classifier with the training data
+    def train(self):
+        clf = self.clf.fit(self.X_train, self.y_train)
+        
+    #This function predicts the test file and writes the results to a file named results.txt   
+    def predict(self,file):
+        testList = []
+        file = open(file, 'r')
+        for line in file.readlines():
+            testList.append(line)
+        test_list_vector = self.vector.transform(testList)
+        results = self.clf.predict(test_list_vector)
+        result_list = list(results)
+        file_result = open("topic_results.txt","w")
+        for result in result_list:
+            file_result.write(str(result)+"\n")
+        file_result.close()
+        
+    #This function checks the accuracy of the classifier     
+    def accuracy(self):
+        accuracy = self.clf.score(self.X_test,self.y_test)
+        print (accuracy)
+        
+        
 class QuestionAnswering(CommandlineArgument):
     """Question answering model
 
@@ -140,7 +187,11 @@ def main():
     arguments = CommandlineArgument() 
 
     if arguments.getTask().lower() == "topic":
-        topic = TopicModelling()
+        log = TopicModelling()
+        log.read('Questions.txt','Topics.txt')
+        log.train()
+        # log.accuracy()
+        log.predict(arguments.getFile())
         print("Please call the top modeling call here...")
     elif arguments.getTask().lower() == "qa":
         qa= QuestionAnswering()
